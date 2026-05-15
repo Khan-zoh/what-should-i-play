@@ -23,6 +23,11 @@ jobs:
           pip install -e ".[dev]"
       - name: Lint
         run: ruff check .
+      - name: Migration round-trip
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
       - name: Test
         run: pytest -v
 
