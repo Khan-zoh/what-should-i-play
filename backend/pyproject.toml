@@ -21,6 +21,10 @@ dev = [
     "mypy>=1.9",
 ]
 
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["alembic*", "tests*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
