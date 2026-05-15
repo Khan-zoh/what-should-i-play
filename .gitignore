@@ -21,3 +21,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# TypeScript build artifacts
+*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
