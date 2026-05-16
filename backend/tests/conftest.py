@@ -5,6 +5,7 @@ import respx as _respx_module
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.db import models  # noqa: F401 — register models with metadata
 from app.db.base import Base
@@ -14,7 +15,12 @@ from app.main import create_app
 @pytest.fixture
 def db_engine():
     """Fresh in-memory SQLite database per test, schema created from metadata."""
-    engine = create_engine("sqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     try:
         yield engine
