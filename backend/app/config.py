@@ -10,5 +10,14 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./wsip.db"
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    # External APIs (empty defaults so tests can run without keys configured)
+    steam_api_key: str = ""
+    steam_user_id: str = ""
+    igdb_client_id: str = ""
+    igdb_client_secret: str = ""
+
+    # HTTP timeouts (seconds)
+    http_timeout_seconds: float = 10.0
+
 
 settings = Settings()
