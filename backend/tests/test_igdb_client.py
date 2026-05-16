@@ -99,7 +99,7 @@ def _stub_token(respx_mock) -> None:
 def test_lookup_by_steam_appid_returns_igdb_id(respx_mock) -> None:
     _stub_token(respx_mock)
     respx_mock.post(IGDB_EXTERNAL).respond(
-        200, json=[{"id": 999, "uid": "367520", "category": 1, "game": 12345}]
+        200, json=[{"id": 999, "uid": "367520", "external_game_source": 1, "game": 12345}]
     )
 
     client = IgdbClient(IgdbAuth("cid", "csecret"), client_id="cid")

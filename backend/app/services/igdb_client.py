@@ -16,8 +16,9 @@ IGDB_COVER_URL_TEMPLATE = (
 # Refresh the token a minute before it actually expires to avoid edge-case 401s.
 _EXPIRATION_SAFETY_SECONDS = 60
 
-# IGDB external_games.category 1 == Steam.
-_STEAM_CATEGORY = 1
+# IGDB external_games.external_game_source 1 == Steam.
+# (Field was renamed from `category` in a recent IGDB API revision.)
+_STEAM_EXTERNAL_SOURCE = 1
 
 
 class IgdbAuthError(Exception):
@@ -97,8 +98,9 @@ class IgdbClient:
 
     def lookup_by_steam_appid(self, steam_appid: int) -> int | None:
         body = (
-            f"fields game,uid,category; "
-            f'where category = {_STEAM_CATEGORY} & uid = "{steam_appid}";'
+            "fields game,uid,external_game_source; "
+            f"where external_game_source = {_STEAM_EXTERNAL_SOURCE} "
+            f'& uid = "{steam_appid}";'
         )
         rows = self._post(IGDB_EXTERNAL_URL, body)
         if not rows:
