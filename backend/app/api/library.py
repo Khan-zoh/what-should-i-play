@@ -83,7 +83,7 @@ class SyncOutcomeOut(BaseModel):
 
 
 @router.get("", response_model=list[LibraryItem])
-def list_library(session: Session = Depends(get_db_session)) -> list[LibraryItem]:  # noqa: B008
+def list_library(session: Session = Depends(get_db_session)) -> list[LibraryItem]:
     rows = LibraryEntryRepository(session).list_all_with_games()
     return [
         LibraryItem(
@@ -102,7 +102,7 @@ def list_library(session: Session = Depends(get_db_session)) -> list[LibraryItem
 
 
 @router.get("/sync-runs", response_model=list[SyncRunOut])
-def list_sync_runs(session: Session = Depends(get_db_session)) -> list[SyncRunOut]:  # noqa: B008
+def list_sync_runs(session: Session = Depends(get_db_session)) -> list[SyncRunOut]:
     rows = SyncRunRepository(session).list_recent(limit=20)
     return [
         SyncRunOut(
@@ -121,7 +121,7 @@ def list_sync_runs(session: Session = Depends(get_db_session)) -> list[SyncRunOu
 @router.post("/sync/steam", response_model=SyncOutcomeOut)
 def sync_steam(
     body: SyncSteamRequest,
-    session: Session = Depends(get_db_session),  # noqa: B008
+    session: Session = Depends(get_db_session),
 ) -> SyncOutcomeOut:
     steam_id = body.steam_id or settings.steam_user_id
     if not steam_id:

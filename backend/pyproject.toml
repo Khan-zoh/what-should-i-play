@@ -33,6 +33,8 @@ extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+# B008: `Depends(...)` defaults are the canonical FastAPI pattern, not a bug.
+extend-ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
