@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
 import pytest
+import respx as _respx_module
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -36,3 +37,10 @@ def client() -> Iterator[TestClient]:
     app = create_app()
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture
+def respx_mock():
+    """Yields a respx router that intercepts all httpx requests during the test."""
+    with _respx_module.mock(assert_all_called=False) as router:
+        yield router
