@@ -6,7 +6,7 @@ See `docs/superpowers/specs/2026-05-15-what-should-i-play-design.md` for the ful
 
 ## Status
 
-Foundation sub-plan complete. Schema spine in place. End-to-end frontend ↔ backend health check working. Subsequent sub-plans add: library import, ratings, recommendations, mood quiz, eval harness, LLM features.
+Foundation + library-import backend complete. Schema spine in place. Steam library imports via `POST /api/library/sync/steam`, with results readable at `GET /api/library` and `GET /api/library/sync-runs`. The frontend is still the foundation health-check page; library and onboarding UI ship in Sub-plan 2b.
 
 ## Prerequisites
 
@@ -32,6 +32,29 @@ npm install
 cd ..
 npm install
 ```
+
+## API Keys (required for library import)
+
+Copy `backend/.env.example` to `backend/.env` and fill in the four values:
+
+| Variable | Where to get it | Notes |
+|---|---|---|
+| `STEAM_API_KEY` | https://steamcommunity.com/dev/apikey | Use `localhost` for the domain field. |
+| `STEAM_USER_ID` | Your numeric Steam ID (17 digits). Find via https://steamid.io if needed. | NOT your nickname. |
+| `IGDB_CLIENT_ID` | https://dev.twitch.tv/console — register an app, "Confidential" client type. | |
+| `IGDB_CLIENT_SECRET` | Same Twitch app — click "New Secret". | Treat like a password. |
+
+`backend/.env` is gitignored. Do not commit it.
+
+Once keys are set, trigger an import:
+
+```bash
+npm run dev
+# in another terminal:
+curl.exe -X POST http://localhost:8000/api/library/sync/steam -H "Content-Type: application/json" -d "{}"
+```
+
+Profile must be public (Steam → Edit Profile → Privacy Settings → Game Details = Public). Re-running the sync updates rather than duplicates.
 
 ## Daily commands
 
