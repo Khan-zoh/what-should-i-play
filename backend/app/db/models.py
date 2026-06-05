@@ -19,6 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -166,6 +167,9 @@ class Preferences(Base):
     liked_types: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     session_length_pref: Mapped[str] = mapped_column(String(16), default="any", nullable=False)
     difficulty_pref: Mapped[str] = mapped_column(String(16), default="any", nullable=False)
+    onboarding_completed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0"), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )

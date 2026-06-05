@@ -64,6 +64,7 @@ class SyncOutcomeOut(BaseModel):
     status: str
     counts: dict
     error: str | None
+    error_code: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +129,7 @@ def sync_steam(
         status=outcome.status,
         counts=outcome.counts,
         error=outcome.error,
+        error_code=outcome.error_code,
     )
 
 

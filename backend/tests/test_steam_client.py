@@ -89,9 +89,55 @@ def test_query_includes_required_params(respx_mock) -> None:
     assert request.url.params["include_played_free_games"] == "true"
 
 
-def test_network_error_raises_httpx_error(respx_mock) -> None:
-    respx_mock.get(OWNED_GAMES_PATH).mock(side_effect=httpx.ConnectError("nope"))
+def test_auth_error_on_401(respx_mock) -> None:
+    from app.services.steam_client import SteamAuthError
 
+    respx_mock.get(OWNED_GAMES_PATH).respond(401, text="Unauthorized")
+    client = SteamClient(api_key="bad", timeout_seconds=5.0)
+    with pytest.raises(SteamAuthError):
+        client.get_owned_games("76561198000000000")
+
+
+def test_auth_error_on_403(respx_mock) -> None:
+    from app.services.steam_client import SteamAuthError
+
+    respx_mock.get(OWNED_GAMES_PATH).respond(403, text="Forbidden")
+    client = SteamClient(api_key="bad", timeout_seconds=5.0)
+    with pytest.raises(SteamAuthError):
+        client.get_owned_games("76561198000000000")
+
+
+def test_public_empty_library_is_success_not_private(respx_mock) -> None:
+    # Public profile that owns zero games: response has game_count but no games key.
+    respx_mock.get(OWNED_GAMES_PATH).respond(200, json={"response": {"game_count": 0}})
     client = SteamClient(api_key="test_key", timeout_seconds=5.0)
-    with pytest.raises(httpx.ConnectError):
+    result = client.get_owned_games("76561198000000000")
+    assert result.game_count == 0
+    assert result.games == []
+
+
+def test_truly_empty_response_still_private(respx_mock) -> None:
+    respx_mock.get(OWNED_GAMES_PATH).respond(200, json={"response": {}})
+    client = SteamClient(api_key="test_key", timeout_seconds=5.0)
+    with pytest.raises(PrivateProfileError):
+        client.get_owned_games("76561198000000000")
+
+
+def test_network_error_wrapped_as_steam_error(respx_mock) -> None:
+    from app.services.steam_client import SteamClientError
+
+    respx_mock.get(OWNED_GAMES_PATH).mock(side_effect=httpx.ConnectError("nope"))
+    client = SteamClient(api_key="test_key", timeout_seconds=5.0)
+    with pytest.raises(SteamClientError):
+        client.get_owned_games("76561198000000000")
+
+
+def test_parse_error_is_not_swallowed(respx_mock) -> None:
+    # A games entry missing 'appid' is a contract bug, not a Steam failure:
+    # it must surface as KeyError, NOT be wrapped into SteamClientError.
+    respx_mock.get(OWNED_GAMES_PATH).respond(
+        200, json={"response": {"game_count": 1, "games": [{"name": "no appid"}]}}
+    )
+    client = SteamClient(api_key="test_key", timeout_seconds=5.0)
+    with pytest.raises(KeyError):
         client.get_owned_games("76561198000000000")

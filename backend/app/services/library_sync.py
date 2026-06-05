@@ -16,10 +16,13 @@ from app.db.repositories import (
 )
 from app.services.igdb_client import IgdbClient, IgdbGame
 from app.services.steam_client import (
+    InvalidSteamIdError,
     PrivateProfileError,
+    SteamAuthError,
     SteamClient,
     SteamClientError,
     SteamGame,
+    SteamRateLimitError,
 )
 
 
@@ -29,6 +32,19 @@ class SyncOutcome:
     status: str  # "ok" | "partial" | "failed"
     counts: dict = field(default_factory=dict)
     error: str | None = None
+    error_code: str | None = None
+
+
+def _error_code_for(exc: SteamClientError) -> str:
+    if isinstance(exc, PrivateProfileError):
+        return "private_profile"
+    if isinstance(exc, SteamAuthError):
+        return "steam_auth"
+    if isinstance(exc, SteamRateLimitError):
+        return "rate_limited"
+    if isinstance(exc, InvalidSteamIdError):
+        return "invalid_steamid"
+    return "steam_error"
 
 
 def _slugify_steam(appid: int, name: str) -> str:
@@ -61,17 +77,16 @@ class LibrarySyncService:
 
         try:
             steam_result = self._steam.get_owned_games(steam_id)
-        except PrivateProfileError as e:
-            self._runs.finish(run, status="failed", counts={}, error=str(e))
-            self._session.commit()
-            return SyncOutcome(
-                run_id=run.id, status="failed", counts={}, error=str(e)
-            )
         except SteamClientError as e:
+            code = _error_code_for(e)
             self._runs.finish(run, status="failed", counts={}, error=str(e))
             self._session.commit()
             return SyncOutcome(
-                run_id=run.id, status="failed", counts={}, error=str(e)
+                run_id=run.id,
+                status="failed",
+                counts={},
+                error=str(e),
+                error_code=code,
             )
 
         # Snapshot existing library so we can classify each game as added vs

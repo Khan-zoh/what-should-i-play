@@ -6,7 +6,10 @@ from app.db.repositories import GameRepository, LibraryEntryRepository, SyncRunR
 from app.services.igdb_client import IgdbGame
 from app.services.library_sync import LibrarySyncService, SyncOutcome
 from app.services.steam_client import (
+    InvalidSteamIdError,
     PrivateProfileError,
+    SteamAuthError,
+    SteamClientError,
     SteamGame,
     SteamLibraryResult,
     SteamRateLimitError,
@@ -248,3 +251,34 @@ def test_outcome_is_a_dataclass_with_expected_fields(db_session: Session) -> Non
     assert outcome.run_id > 0
     assert outcome.status in {"ok", "partial", "failed"}
     assert isinstance(outcome.counts, dict)
+
+
+@pytest.mark.parametrize(
+    "exc, expected_code",
+    [
+        (PrivateProfileError("x"), "private_profile"),
+        (SteamAuthError("x"), "steam_auth"),
+        (SteamRateLimitError("x"), "rate_limited"),
+        (InvalidSteamIdError("x"), "invalid_steamid"),
+        (SteamClientError("x"), "steam_error"),
+    ],
+)
+def test_sync_maps_exception_to_error_code(db_session, exc, expected_code) -> None:
+    steam = FakeSteamClient(exc=exc)
+    igdb = FakeIgdbClient({})
+    service = _make_service(db_session, steam, igdb)
+
+    outcome = service.sync_steam(steam_id="76561198000000000")
+    assert outcome.status == "failed"
+    assert outcome.error_code == expected_code
+
+
+def test_sync_zero_games_is_ok_with_no_error_code(db_session) -> None:
+    steam = FakeSteamClient(result=SteamLibraryResult(game_count=0, games=[]))
+    igdb = FakeIgdbClient({})
+    service = _make_service(db_session, steam, igdb)
+
+    outcome = service.sync_steam(steam_id="76561198000000000")
+    assert outcome.status == "ok"
+    assert outcome.error_code is None
+    assert outcome.counts == {"added": 0, "updated": 0, "unmatched_igdb": 0}
