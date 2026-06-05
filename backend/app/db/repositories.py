@@ -250,3 +250,11 @@ class PreferencesRepository:
         prefs.difficulty_pref = difficulty_pref
         self._session.flush()
         return prefs
+
+    def get_onboarding_completed(self) -> bool:
+        return self.get_or_create().onboarding_completed
+
+    def set_onboarding_completed(self, value: bool) -> None:
+        prefs = self.get_or_create()
+        prefs.onboarding_completed = value
+        self._session.flush()

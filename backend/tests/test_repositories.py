@@ -350,3 +350,31 @@ def test_preferences_defaults_onboarding_incomplete(db_session) -> None:
     prefs = PreferencesRepository(db_session).get_or_create()
     db_session.commit()
     assert prefs.onboarding_completed is False
+
+
+def test_onboarding_get_set_roundtrip(db_session) -> None:
+    from app.db.repositories import PreferencesRepository
+
+    repo = PreferencesRepository(db_session)
+    assert repo.get_onboarding_completed() is False
+    repo.set_onboarding_completed(True)
+    db_session.commit()
+    assert repo.get_onboarding_completed() is True
+
+
+def test_preferences_update_preserves_onboarding_flag(db_session) -> None:
+    from app.db.repositories import PreferencesRepository
+
+    repo = PreferencesRepository(db_session)
+    repo.set_onboarding_completed(True)
+    db_session.commit()
+
+    repo.update(
+        liked_genres=["RPG"],
+        disliked_genres=[],
+        liked_types=[],
+        session_length_pref="short",
+        difficulty_pref="any",
+    )
+    db_session.commit()
+    assert repo.get_onboarding_completed() is True  # not clobbered by a prefs save
