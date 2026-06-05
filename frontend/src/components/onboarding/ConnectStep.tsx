@@ -11,6 +11,7 @@ export default function ConnectStep({ onNext }: { onNext: () => void }) {
   const runImport = async () => {
     if (busy) return;
     setBusy(true);
+    setResult(null); // clear any prior card so a retry shows a clean in-progress state
     try {
       const r = await syncSteam(steamId.trim() || undefined);
       setResult(r);
@@ -41,6 +42,7 @@ export default function ConnectStep({ onNext }: { onNext: () => void }) {
       </div>
 
       <input
+        aria-label="Steam ID"
         className="w-full rounded-md border border-border bg-background px-3 py-2"
         placeholder="Leave blank to use server-configured ID"
         value={steamId}

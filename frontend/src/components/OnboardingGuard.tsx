@@ -2,6 +2,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getOnboarding } from "@/lib/api";
 
+// IMPORTANT: this guard must wrap <Routes>, not live on a route. The onboarding
+// check runs once on mount; a client-side navigate() does not remount it, which is
+// why setOnboarding(true) + navigate("/") never bounces. Moving it onto a route
+// would remount it on each navigation and silently reintroduce a redirect loop.
 export default function OnboardingGuard({ children }: { children: ReactNode }) {
   const [checked, setChecked] = useState(false);
   const navigate = useNavigate();

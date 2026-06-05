@@ -14,7 +14,13 @@ export default function OnboardingWizard() {
   const navigate = useNavigate();
 
   const complete = async () => {
-    await setOnboarding(true);
+    // Persist the flag, but never strand the user on a flaky PUT: navigate
+    // regardless. The guard fails open, so worst case onboarding reappears next load.
+    try {
+      await setOnboarding(true);
+    } catch {
+      // ignore — proceed to the app anyway
+    }
     navigate("/");
   };
 
