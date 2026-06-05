@@ -41,6 +41,8 @@ export default function LibraryPage() {
     );
   };
 
+  // The disabled={pending} prop on the panel controls is the load-bearing
+  // guard; this in-function check is belt-and-suspenders against a re-entrant call.
   const rate = async (item: LibraryItem, value: number | null) => {
     if (pending.has(item.game_id)) return;
     const prev = item.enjoyment;
@@ -93,6 +95,7 @@ export default function LibraryPage() {
         </h1>
         <Button
           size="sm"
+          aria-pressed={ratedOnly}
           variant={ratedOnly ? "default" : "outline"}
           onClick={() => setRatedOnly((v) => !v)}
         >
@@ -102,6 +105,7 @@ export default function LibraryPage() {
           <Button
             key={s}
             size="sm"
+            aria-pressed={sort === s}
             variant={sort === s ? "default" : "outline"}
             onClick={() => setSort(s)}
           >

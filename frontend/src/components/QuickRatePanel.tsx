@@ -2,6 +2,7 @@ import type { LibraryItem } from "@/lib/api";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -30,6 +31,9 @@ export default function QuickRatePanel({
           <>
             <SheetHeader>
               <SheetTitle>{item.name}</SheetTitle>
+              <SheetDescription>
+                Rate how much you enjoyed this game and set its play status.
+              </SheetDescription>
             </SheetHeader>
             <div className="mt-6 space-y-6">
               <div className="space-y-2">
