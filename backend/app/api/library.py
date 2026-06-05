@@ -5,38 +5,25 @@ return JSON. All ORM work happens through the repository layer.
 """
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_db_session
 from app.config import settings
+from app.db.models import VALID_GAME_STATUSES
 from app.db.repositories import (
     GameRepository,
     LibraryEntryRepository,
+    RatingRepository,
     SyncRunRepository,
+    UserGameStateRepository,
 )
-from app.db.session import SessionLocal
 from app.services.igdb_client import IgdbAuth, IgdbClient
 from app.services.library_sync import LibrarySyncService, SyncOutcome
 from app.services.steam_client import SteamClient
 
 router = APIRouter(prefix="/api/library", tags=["library"])
-
-
-# ---------------------------------------------------------------------------
-# DB session dependency. Defined here (not imported from app.db.session.get_db)
-# so tests can override it cleanly via app.dependency_overrides.
-# ---------------------------------------------------------------------------
-
-
-def get_db_session() -> Iterator[Session]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +41,8 @@ class LibraryItem(BaseModel):
     cover_url: str | None
     critic_score: float | None
     store_url: str | None
+    enjoyment: int | None
+    status: str | None
 
 
 class SyncRunOut(BaseModel):
@@ -84,7 +73,7 @@ class SyncOutcomeOut(BaseModel):
 
 @router.get("", response_model=list[LibraryItem])
 def list_library(session: Session = Depends(get_db_session)) -> list[LibraryItem]:
-    rows = LibraryEntryRepository(session).list_all_with_games()
+    rows = LibraryEntryRepository(session).list_with_user_data()
     return [
         LibraryItem(
             game_id=g.id,
@@ -96,8 +85,10 @@ def list_library(session: Session = Depends(get_db_session)) -> list[LibraryItem
             cover_url=g.cover_url,
             critic_score=g.critic_score,
             store_url=g.store_url,
+            enjoyment=rating.enjoyment if rating else None,
+            status=state.status if state else None,
         )
-        for entry, g in rows
+        for entry, g, rating, state in rows
     ]
 
 
@@ -138,6 +129,67 @@ def sync_steam(
         counts=outcome.counts,
         error=outcome.error,
     )
+
+
+class RatingRequest(BaseModel):
+    enjoyment: int | None = Field(default=None, ge=1, le=5)
+    notes: str | None = None
+
+
+class RatingOut(BaseModel):
+    game_id: int
+    enjoyment: int | None
+    notes: str | None
+
+
+class StatusRequest(BaseModel):
+    status: str | None = None
+
+
+class StatusOut(BaseModel):
+    game_id: int
+    status: str | None
+
+
+def _require_game(session: Session, game_id: int) -> None:
+    if GameRepository(session).get(game_id) is None:
+        raise HTTPException(status_code=404, detail=f"Game {game_id} not found")
+
+
+@router.post("/games/{game_id}/rating", response_model=RatingOut)
+def set_rating(
+    game_id: int,
+    body: RatingRequest,
+    session: Session = Depends(get_db_session),
+) -> RatingOut:
+    _require_game(session, game_id)
+    repo = RatingRepository(session)
+    if body.enjoyment is None:
+        repo.delete(game_id=game_id)
+        session.commit()
+        return RatingOut(game_id=game_id, enjoyment=None, notes=None)
+    rating = repo.upsert(game_id=game_id, enjoyment=body.enjoyment, notes=body.notes)
+    session.commit()
+    return RatingOut(game_id=game_id, enjoyment=rating.enjoyment, notes=rating.notes)
+
+
+@router.put("/games/{game_id}/status", response_model=StatusOut)
+def set_status(
+    game_id: int,
+    body: StatusRequest,
+    session: Session = Depends(get_db_session),
+) -> StatusOut:
+    _require_game(session, game_id)
+    repo = UserGameStateRepository(session)
+    if body.status is None:
+        repo.clear(game_id=game_id)
+        session.commit()
+        return StatusOut(game_id=game_id, status=None)
+    if body.status not in VALID_GAME_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status: {body.status}")
+    state = repo.set_status(game_id=game_id, status=body.status)
+    session.commit()
+    return StatusOut(game_id=game_id, status=state.status)
 
 
 # ---------------------------------------------------------------------------
