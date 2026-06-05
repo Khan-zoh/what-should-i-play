@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiGet, apiPost, apiPut, type LibraryItem } from "@/lib/api";
 import GameCard from "@/components/GameCard";
 import QuickRatePanel from "@/components/QuickRatePanel";
@@ -16,6 +17,7 @@ export default function LibraryPage() {
   // Game ids with an in-flight mutation; controls disable to avoid out-of-order
   // writes (single-user, but cheap correctness insurance).
   const [pending, setPending] = useState<ReadonlySet<number>>(new Set());
+  const navigate = useNavigate();
 
   const markPending = (gameId: number, on: boolean) =>
     setPending((prev) => {
@@ -86,6 +88,18 @@ export default function LibraryPage() {
 
   if (loading) return <p>Loading library...</p>;
   if (error) return <p className="text-red-600">Failed to load: {error}</p>;
+
+  if (items.length === 0) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 py-16 text-center">
+        <h1 className="text-2xl font-semibold">Your library is empty</h1>
+        <p className="text-muted-foreground">
+          Import your Steam games to start rating them and getting picks.
+        </p>
+        <Button onClick={() => navigate("/onboarding")}>Import from Steam</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
