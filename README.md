@@ -6,7 +6,14 @@ See `docs/superpowers/specs/2026-05-15-what-should-i-play-design.md` for the ful
 
 ## Status
 
-Foundation + library-import backend complete. Schema spine in place. Steam library imports via `POST /api/library/sync/steam`, with results readable at `GET /api/library` and `GET /api/library/sync-runs`. The frontend is still the foundation health-check page; library and onboarding UI ship in Sub-plan 2b.
+Foundation + library-import backend + **library page & ratings UI (Sub-plan 2b)** complete. Steam library imports via `POST /api/library/sync/steam`, readable at `GET /api/library` (now including each game's rating + status) and `GET /api/library/sync-runs`. The React app has a router with two pages:
+
+- **Library** (`/`) — responsive cover grid of your imported games with a quick-rate side panel: rate each game Loved/Liked/Meh/Disliked/Hated (→ 5/4/3/2/1), set a play status (backlog/installed/currently playing/completed/abandoned), filter to rated-only, and sort. Mutations are optimistic with rollback.
+- **Preferences** (`/preferences`) — liked/disliked genres, enjoyed types, preferred session length and difficulty.
+
+User-data endpoints: `POST /api/library/games/{id}/rating` (null clears), `PUT /api/library/games/{id}/status` (null clears), `GET|PUT /api/preferences`.
+
+The onboarding wizard, first-run detection, and Steam-failure UX ship in Sub-plan 2c.
 
 ## Prerequisites
 
@@ -64,6 +71,7 @@ Profile must be public (Steam → Edit Profile → Privacy Settings → Game Det
 | `npm run test` | Runs backend pytest suite |
 | `npm run lint` | Runs ruff on backend |
 | `npm run build` | Production build of the frontend |
+| `cd frontend && npm run test` | Runs the frontend Vitest suite (rating/status mapping) |
 
 ## Project layout
 

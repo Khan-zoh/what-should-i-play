@@ -10,7 +10,14 @@ from datetime import datetime
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.db.models import DataSyncRun, Game, LibraryEntry
+from app.db.models import (
+    DataSyncRun,
+    Game,
+    LibraryEntry,
+    Preferences,
+    Rating,
+    UserGameState,
+)
 
 
 class GameRepository:
@@ -66,6 +73,9 @@ class GameRepository:
         self._session.flush()
         return existing
 
+    def get(self, game_id: int) -> Game | None:
+        return self._session.get(Game, game_id)
+
 
 class LibraryEntryRepository:
     def __init__(self, session: Session) -> None:
@@ -104,6 +114,17 @@ class LibraryEntryRepository:
         ).all()
         return [(le, g) for le, g in rows]
 
+    def list_with_user_data(
+        self,
+    ) -> list[tuple[LibraryEntry, Game, Rating | None, UserGameState | None]]:
+        rows = self._session.execute(
+            select(LibraryEntry, Game, Rating, UserGameState)
+            .join(Game, Game.id == LibraryEntry.game_id)
+            .outerjoin(Rating, Rating.game_id == Game.id)
+            .outerjoin(UserGameState, UserGameState.game_id == Game.id)
+        ).all()
+        return [(le, g, r, s) for le, g, r, s in rows]
+
 
 class SyncRunRepository:
     def __init__(self, session: Session) -> None:
@@ -134,3 +155,98 @@ class SyncRunRepository:
             select(DataSyncRun).order_by(desc(DataSyncRun.started_at)).limit(limit)
         ).all()
         return list(rows)
+
+
+class RatingRepository:
+    # Note: `enjoyment` is intentionally nullable at the repo level — a future
+    # notes-only / finished-only row is valid. The "Haven't played = no row"
+    # product invariant is enforced at the API layer (delete on null), not here.
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, *, game_id: int) -> Rating | None:
+        return self._session.scalar(select(Rating).where(Rating.game_id == game_id))
+
+    def upsert(
+        self,
+        *,
+        game_id: int,
+        enjoyment: int | None,
+        notes: str | None = None,
+        finished: bool | None = None,
+    ) -> Rating:
+        existing = self.get(game_id=game_id)
+        if existing is None:
+            existing = Rating(game_id=game_id)
+            self._session.add(existing)
+        existing.enjoyment = enjoyment
+        existing.notes = notes
+        existing.finished = finished
+        self._session.flush()
+        return existing
+
+    def delete(self, *, game_id: int) -> bool:
+        existing = self.get(game_id=game_id)
+        if existing is None:
+            return False
+        self._session.delete(existing)
+        self._session.flush()
+        return True
+
+
+class UserGameStateRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, *, game_id: int) -> UserGameState | None:
+        return self._session.get(UserGameState, game_id)
+
+    def set_status(self, *, game_id: int, status: str) -> UserGameState:
+        existing = self.get(game_id=game_id)
+        if existing is None:
+            existing = UserGameState(game_id=game_id, status=status)
+            self._session.add(existing)
+        existing.status = status
+        self._session.flush()
+        return existing
+
+    def clear(self, *, game_id: int) -> bool:
+        existing = self.get(game_id=game_id)
+        if existing is None:
+            return False
+        self._session.delete(existing)
+        self._session.flush()
+        return True
+
+
+class PreferencesRepository:
+    _SINGLETON_ID = 1
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get_or_create(self) -> Preferences:
+        existing = self._session.get(Preferences, self._SINGLETON_ID)
+        if existing is None:
+            existing = Preferences(id=self._SINGLETON_ID)
+            self._session.add(existing)
+            self._session.flush()
+        return existing
+
+    def update(
+        self,
+        *,
+        liked_genres: list[str],
+        disliked_genres: list[str],
+        liked_types: list[str],
+        session_length_pref: str,
+        difficulty_pref: str,
+    ) -> Preferences:
+        prefs = self.get_or_create()
+        prefs.liked_genres = liked_genres
+        prefs.disliked_genres = disliked_genres
+        prefs.liked_types = liked_types
+        prefs.session_length_pref = session_length_pref
+        prefs.difficulty_pref = difficulty_pref
+        self._session.flush()
+        return prefs
