@@ -342,3 +342,11 @@ def test_library_list_with_user_data_left_joins(db_session) -> None:
     assert by_name["B"][2] is None  # no rating row
     assert by_name["B"][3] is None  # no state row
     assert len(rows) == 2
+
+
+def test_preferences_defaults_onboarding_incomplete(db_session) -> None:
+    from app.db.repositories import PreferencesRepository
+
+    prefs = PreferencesRepository(db_session).get_or_create()
+    db_session.commit()
+    assert prefs.onboarding_completed is False
