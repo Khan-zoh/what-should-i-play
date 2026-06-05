@@ -6,14 +6,15 @@ See `docs/superpowers/specs/2026-05-15-what-should-i-play-design.md` for the ful
 
 ## Status
 
-Foundation + library-import backend + **library page & ratings UI (Sub-plan 2b)** complete. Steam library imports via `POST /api/library/sync/steam`, readable at `GET /api/library` (now including each game's rating + status) and `GET /api/library/sync-runs`. The React app has a router with two pages:
+Foundation + library-import backend + **library page & ratings UI (2b)** + **onboarding, first-run & Steam-failure UX (2c)** complete. The React app has a router with three surfaces:
 
-- **Library** (`/`) — responsive cover grid of your imported games with a quick-rate side panel: rate each game Loved/Liked/Meh/Disliked/Hated (→ 5/4/3/2/1), set a play status (backlog/installed/currently playing/completed/abandoned), filter to rated-only, and sort. Mutations are optimistic with rollback.
-- **Preferences** (`/preferences`) — liked/disliked genres, enjoyed types, preferred session length and difficulty.
+- **Onboarding** (`/onboarding`) — a first-run wizard (Welcome → Connect Steam → Preferences). A new user is auto-redirected here; finishing or skipping sets a persisted flag. This is now the first place the Steam import is triggered from the UI (no curl needed). Import failures show distinct, actionable guidance (private profile, invalid ID with inline re-entry, rate-limited, server API-key problem) with Retry / Skip import.
+- **Library** (`/`) — responsive cover grid with a quick-rate side panel: rate each game Loved/Liked/Meh/Disliked/Hated (→ 5/4/3/2/1), set a play status, filter to rated-only, and sort. Optimistic with rollback. Shows a first-time empty state with an "Import from Steam" CTA when the library is empty.
+- **Preferences** (`/preferences`) — liked/disliked genres, enjoyed types, session length, difficulty, plus a "Re-run setup" button.
 
-User-data endpoints: `POST /api/library/games/{id}/rating` (null clears), `PUT /api/library/games/{id}/status` (null clears), `GET|PUT /api/preferences`.
+Steam library imports via `POST /api/library/sync/steam` (the response now carries a machine-readable `error_code` on failure). Endpoints: `GET /api/library` (includes each game's rating + status), `POST /api/library/games/{id}/rating` (null clears), `PUT /api/library/games/{id}/status` (null clears), `GET|PUT /api/preferences`, `GET|PUT /api/onboarding`.
 
-The onboarding wizard, first-run detection, and Steam-failure UX ship in Sub-plan 2c.
+Manual game entry, a "For You" surface, and the mood quiz ship in later sub-plans.
 
 ## Prerequisites
 
