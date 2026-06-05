@@ -179,3 +179,166 @@ def test_list_recent_returns_descending_by_started_at(db_session: Session) -> No
 
     rows = repo.list_recent(limit=10)
     assert [r.id for r in rows] == [b.id, a.id]
+
+
+# ---------------------------------------------------------------------------
+# RatingRepository
+# ---------------------------------------------------------------------------
+
+
+def test_rating_repository_upsert_creates_then_updates(db_session) -> None:
+    from app.db.repositories import GameRepository, RatingRepository
+
+    g = GameRepository(db_session).upsert(
+        igdb_id=1, steam_appid=10, name="Celeste", slug="celeste"
+    )
+    db_session.commit()
+    repo = RatingRepository(db_session)
+
+    created = repo.upsert(game_id=g.id, enjoyment=5, notes="great")
+    db_session.commit()
+    assert created.enjoyment == 5
+    assert created.notes == "great"
+
+    updated = repo.upsert(game_id=g.id, enjoyment=3, notes=None)
+    db_session.commit()
+    assert updated.id == created.id  # same row, not a new one
+    assert updated.enjoyment == 3
+
+
+def test_rating_repository_delete_removes_row(db_session) -> None:
+    from app.db.repositories import GameRepository, RatingRepository
+
+    g = GameRepository(db_session).upsert(
+        igdb_id=2, steam_appid=20, name="Hades", slug="hades"
+    )
+    db_session.commit()
+    repo = RatingRepository(db_session)
+    repo.upsert(game_id=g.id, enjoyment=4, notes=None)
+    db_session.commit()
+
+    deleted = repo.delete(game_id=g.id)
+    db_session.commit()
+    assert deleted is True
+    assert repo.get(game_id=g.id) is None
+
+    # Deleting a non-existent rating is a no-op returning False.
+    assert repo.delete(game_id=g.id) is False
+
+
+# ---------------------------------------------------------------------------
+# UserGameStateRepository
+# ---------------------------------------------------------------------------
+
+
+def test_state_repository_set_creates_then_updates(db_session) -> None:
+    from app.db.repositories import GameRepository, UserGameStateRepository
+
+    g = GameRepository(db_session).upsert(
+        igdb_id=3, steam_appid=30, name="Stardew Valley", slug="stardew-valley"
+    )
+    db_session.commit()
+    repo = UserGameStateRepository(db_session)
+
+    created = repo.set_status(game_id=g.id, status="backlog")
+    db_session.commit()
+    assert created.status == "backlog"
+
+    updated = repo.set_status(game_id=g.id, status="currently_playing")
+    db_session.commit()
+    assert updated.game_id == g.id  # PK is game_id; same row
+    assert updated.status == "currently_playing"
+
+
+def test_state_repository_clear_removes_row(db_session) -> None:
+    from app.db.repositories import GameRepository, UserGameStateRepository
+
+    g = GameRepository(db_session).upsert(
+        igdb_id=4, steam_appid=40, name="Tunic", slug="tunic"
+    )
+    db_session.commit()
+    repo = UserGameStateRepository(db_session)
+    repo.set_status(game_id=g.id, status="completed")
+    db_session.commit()
+
+    assert repo.clear(game_id=g.id) is True
+    db_session.commit()
+    assert repo.get(game_id=g.id) is None
+    assert repo.clear(game_id=g.id) is False
+
+
+# ---------------------------------------------------------------------------
+# PreferencesRepository
+# ---------------------------------------------------------------------------
+
+
+def test_preferences_get_or_create_returns_singleton(db_session) -> None:
+    from app.db.repositories import PreferencesRepository
+
+    repo = PreferencesRepository(db_session)
+    p1 = repo.get_or_create()
+    db_session.commit()
+    assert p1.id == 1
+    assert p1.liked_genres == []
+    assert p1.session_length_pref == "any"
+
+    p2 = repo.get_or_create()
+    assert p2.id == 1  # no second row
+
+
+def test_preferences_update_persists_fields(db_session) -> None:
+    from app.db.repositories import PreferencesRepository
+
+    repo = PreferencesRepository(db_session)
+    repo.get_or_create()
+    db_session.commit()
+
+    updated = repo.update(
+        liked_genres=["RPG", "Roguelike"],
+        disliked_genres=["Sports"],
+        liked_types=["singleplayer"],
+        session_length_pref="short",
+        difficulty_pref="any",
+    )
+    db_session.commit()
+    assert updated.liked_genres == ["RPG", "Roguelike"]
+    assert updated.disliked_genres == ["Sports"]
+    assert updated.session_length_pref == "short"
+
+
+# ---------------------------------------------------------------------------
+# LibraryEntryRepository.list_with_user_data
+# ---------------------------------------------------------------------------
+
+
+def test_library_list_with_user_data_left_joins(db_session) -> None:
+    from app.db.repositories import (
+        GameRepository,
+        LibraryEntryRepository,
+        RatingRepository,
+        UserGameStateRepository,
+    )
+
+    games = GameRepository(db_session)
+    lib = LibraryEntryRepository(db_session)
+
+    rated = games.upsert(igdb_id=1, steam_appid=10, name="A", slug="a")
+    bare = games.upsert(igdb_id=2, steam_appid=20, name="B", slug="b")
+    db_session.commit()
+    lib.upsert(game_id=rated.id, source="steam", external_id="10", hours_played=5.0)
+    lib.upsert(game_id=bare.id, source="steam", external_id="20", hours_played=0.0)
+    db_session.commit()
+    RatingRepository(db_session).upsert(game_id=rated.id, enjoyment=5, notes=None)
+    UserGameStateRepository(db_session).set_status(
+        game_id=rated.id, status="completed"
+    )
+    db_session.commit()
+
+    rows = lib.list_with_user_data()
+    by_name = {g.name: (entry, g, rating, state) for entry, g, rating, state in rows}
+
+    assert by_name["A"][2].enjoyment == 5
+    assert by_name["A"][3].status == "completed"
+    assert by_name["B"][2] is None  # no rating row
+    assert by_name["B"][3] is None  # no state row
+    assert len(rows) == 2
