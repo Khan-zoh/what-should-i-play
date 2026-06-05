@@ -27,6 +27,10 @@ class SteamRateLimitError(SteamClientError):
     """Steam returned 429."""
 
 
+class SteamAuthError(SteamClientError):
+    """Steam returned 401/403 — the API key is missing or invalid."""
+
+
 @dataclass(frozen=True)
 class SteamGame:
     appid: int
@@ -55,22 +59,34 @@ class SteamClient:
             "include_appinfo": "true",
             "include_played_free_games": "true",
         }
-        with httpx.Client(timeout=self._timeout) as client:
-            response = client.get(url, params=params)
+        try:
+            with httpx.Client(timeout=self._timeout) as client:
+                response = client.get(url, params=params)
+        except httpx.RequestError as e:
+            raise SteamClientError(f"Network error contacting Steam: {e}") from e
 
         if response.status_code == 429:
             raise SteamRateLimitError("Steam rate limit hit (HTTP 429).")
+        if response.status_code in (401, 403):
+            raise SteamAuthError(
+                f"Steam returned {response.status_code} — API key missing or invalid."
+            )
         if response.status_code >= 500:
             raise InvalidSteamIdError(
                 f"Steam returned {response.status_code} — usually means an invalid steamid."
             )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise SteamClientError(f"Steam returned HTTP {response.status_code}.") from e
 
         payload = response.json().get("response", {})
         if "games" not in payload:
-            # Steam returns {"response": {}} for private profiles or accounts
-            # with no games purchased. We treat both as PrivateProfileError;
-            # the orchestrator can refine the message if needed.
+            # No 'games' key. Two cases:
+            #  - public profile owning zero games: 'game_count' present and 0 -> success
+            #  - private profile / no data: empty {} -> PrivateProfileError
+            if payload.get("game_count") == 0:
+                return SteamLibraryResult(game_count=0, games=[])
             raise PrivateProfileError(
                 "Steam returned no game list — profile is private or account owns no games."
             )
