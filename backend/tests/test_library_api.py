@@ -96,6 +96,7 @@ def test_post_sync_steam_invokes_service_and_returns_outcome(
         "status": "ok",
         "counts": {"added": 7, "updated": 0, "unmatched_igdb": 0},
         "error": None,
+        "error_code": None,
     }
     assert captured["steam_id"] == "76561198000000000"
 
@@ -210,3 +211,31 @@ def test_status_unknown_game_returns_404(db_session: Session) -> None:
     client = _make_client_with_session(db_session)
     res = client.put("/api/library/games/99999/status", json={"status": "backlog"})
     assert res.status_code == 404
+
+
+def test_sync_steam_returns_error_code(db_session: Session, monkeypatch) -> None:
+    fake_outcome = SyncOutcome(
+        run_id=9,
+        status="failed",
+        counts={},
+        error="profile is private",
+        error_code="private_profile",
+    )
+
+    class FakeService:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def sync_steam(self, *, steam_id: str) -> SyncOutcome:
+            return fake_outcome
+
+    monkeypatch.setattr(
+        library_api, "_build_sync_service", lambda session: FakeService()
+    )
+
+    client = _make_client_with_session(db_session)
+    res = client.post("/api/library/sync/steam", json={"steam_id": "76561198000000000"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "failed"
+    assert body["error_code"] == "private_profile"
