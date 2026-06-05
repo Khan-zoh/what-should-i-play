@@ -50,3 +50,24 @@ export interface Preferences {
   session_length_pref: string;
   difficulty_pref: string;
 }
+
+export interface OnboardingStatus {
+  completed: boolean;
+}
+
+export interface SyncResult {
+  run_id: number;
+  status: "ok" | "partial" | "failed";
+  counts: Record<string, number>;
+  error: string | null;
+  error_code: string | null;
+}
+
+export const getOnboarding = () => apiGet<OnboardingStatus>("/api/onboarding");
+export const setOnboarding = (completed: boolean) =>
+  apiPut<OnboardingStatus>("/api/onboarding", { completed });
+export const syncSteam = (steamId?: string) =>
+  apiPost<SyncResult>(
+    "/api/library/sync/steam",
+    steamId ? { steam_id: steamId } : {},
+  );
