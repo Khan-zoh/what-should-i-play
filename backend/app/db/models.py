@@ -123,6 +123,23 @@ class UserGameState(Base):
     )
 
 
+VALID_GAME_STATUSES = frozenset(
+    {
+        "backlog",
+        "installed",
+        "currently_playing",
+        "completed",
+        "abandoned",
+        "wishlisted",
+        "hidden",
+        "not_interested",
+        "want_to_replay",
+        "multiplayer_only",
+        "tried_and_refunded",
+    }
+)
+
+
 class Rating(Base):
     __tablename__ = "ratings"
 
