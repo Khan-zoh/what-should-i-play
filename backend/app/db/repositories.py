@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     DataSyncRun,
     Game,
+    GameTag,
     LibraryEntry,
     Preferences,
     Rating,
@@ -258,3 +259,35 @@ class PreferencesRepository:
         prefs = self.get_or_create()
         prefs.onboarding_completed = value
         self._session.flush()
+
+
+class GameTagRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def replace_tags(self, *, game_id: int, kind: str, tags: list[str]) -> None:
+        self._session.execute(
+            delete(GameTag).where(GameTag.game_id == game_id, GameTag.kind == kind)
+        )
+        for tag in dict.fromkeys(tags):  # de-dupe, preserve order
+            self._session.add(GameTag(game_id=game_id, kind=kind, tag=tag))
+        self._session.flush()
+
+    def genres_for(self, game_id: int) -> set[str]:
+        rows = self._session.scalars(
+            select(GameTag.tag).where(
+                GameTag.game_id == game_id, GameTag.kind == "genre"
+            )
+        ).all()
+        return set(rows)
+
+    def tags_by_game(self, game_ids: list[int]) -> dict[int, dict[str, set[str]]]:
+        result: dict[int, dict[str, set[str]]] = {gid: {} for gid in game_ids}
+        if not game_ids:
+            return result
+        rows = self._session.scalars(
+            select(GameTag).where(GameTag.game_id.in_(game_ids))
+        ).all()
+        for t in rows:
+            result.setdefault(t.game_id, {}).setdefault(t.kind, set()).add(t.tag)
+        return result

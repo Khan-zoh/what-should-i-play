@@ -14,6 +14,7 @@ from app.config import settings
 from app.db.models import VALID_GAME_STATUSES
 from app.db.repositories import (
     GameRepository,
+    GameTagRepository,
     LibraryEntryRepository,
     RatingRepository,
     SyncRunRepository,
@@ -220,5 +221,6 @@ def _build_sync_service(session: Session) -> LibrarySyncService:
         games=GameRepository(session),
         library=LibraryEntryRepository(session),
         sync_runs=SyncRunRepository(session),
+        game_tags=GameTagRepository(session),
         session=session,
     )

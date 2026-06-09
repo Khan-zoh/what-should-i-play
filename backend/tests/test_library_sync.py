@@ -2,7 +2,12 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.db.models import DataSyncRun, Game, LibraryEntry
-from app.db.repositories import GameRepository, LibraryEntryRepository, SyncRunRepository
+from app.db.repositories import (
+    GameRepository,
+    GameTagRepository,
+    LibraryEntryRepository,
+    SyncRunRepository,
+)
 from app.services.igdb_client import IgdbGame
 from app.services.library_sync import LibrarySyncService, SyncOutcome
 from app.services.steam_client import (
@@ -58,6 +63,7 @@ def _make_service(
         games=GameRepository(db_session),
         library=LibraryEntryRepository(db_session),
         sync_runs=SyncRunRepository(db_session),
+        game_tags=GameTagRepository(db_session),
         session=db_session,
     )
 
@@ -282,3 +288,32 @@ def test_sync_zero_games_is_ok_with_no_error_code(db_session) -> None:
     assert outcome.status == "ok"
     assert outcome.error_code is None
     assert outcome.counts == {"added": 0, "updated": 0, "unmatched_igdb": 0}
+
+
+def test_sync_persists_igdb_genres_and_themes_as_tags(db_session) -> None:
+    from app.db.repositories import GameTagRepository
+
+    igdb_game = IgdbGame(
+        igdb_id=555,
+        name="Hollow Knight",
+        slug="hollow-knight",
+        genres=["Platform", "Adventure"],
+        themes=["Fantasy"],
+    )
+    steam = FakeSteamClient(
+        result=SteamLibraryResult(
+            game_count=1,
+            games=[
+                SteamGame(appid=367520, name="Hollow Knight", playtime_minutes=600, icon_hash=None)
+            ],
+        )
+    )
+    igdb = FakeIgdbClient({367520: (555, igdb_game)})
+    service = _make_service(db_session, steam, igdb)
+
+    service.sync_steam(steam_id="76561198000000000")
+
+    game = db_session.query(Game).filter_by(steam_appid=367520).one()
+    tags = GameTagRepository(db_session)
+    assert tags.genres_for(game.id) == {"Platform", "Adventure"}
+    assert tags.tags_by_game([game.id])[game.id]["theme"] == {"Fantasy"}

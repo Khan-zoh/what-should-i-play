@@ -378,3 +378,44 @@ def test_preferences_update_preserves_onboarding_flag(db_session) -> None:
     )
     db_session.commit()
     assert repo.get_onboarding_completed() is True  # not clobbered by a prefs save
+
+
+# ---------------------------------------------------------------------------
+# GameTagRepository
+# ---------------------------------------------------------------------------
+
+
+def test_game_tag_repository_replace_is_idempotent(db_session) -> None:
+    from app.db.repositories import GameRepository, GameTagRepository
+
+    g = GameRepository(db_session).upsert(igdb_id=1, steam_appid=10, name="A", slug="a")
+    db_session.commit()
+    repo = GameTagRepository(db_session)
+
+    repo.replace_tags(game_id=g.id, kind="genre", tags=["RPG", "Adventure"])
+    db_session.commit()
+    assert repo.genres_for(g.id) == {"RPG", "Adventure"}
+
+    # Re-running replaces, does not duplicate.
+    repo.replace_tags(game_id=g.id, kind="genre", tags=["RPG", "Strategy"])
+    db_session.commit()
+    assert repo.genres_for(g.id) == {"RPG", "Strategy"}
+
+
+def test_game_tag_repository_tags_by_game_groups_by_kind(db_session) -> None:
+    from app.db.repositories import GameRepository, GameTagRepository
+
+    games = GameRepository(db_session)
+    a = games.upsert(igdb_id=1, steam_appid=10, name="A", slug="a")
+    b = games.upsert(igdb_id=2, steam_appid=20, name="B", slug="b")
+    db_session.commit()
+    repo = GameTagRepository(db_session)
+    repo.replace_tags(game_id=a.id, kind="genre", tags=["RPG"])
+    repo.replace_tags(game_id=a.id, kind="theme", tags=["Fantasy"])
+    repo.replace_tags(game_id=b.id, kind="genre", tags=["Shooter"])
+    db_session.commit()
+
+    by_game = repo.tags_by_game([a.id, b.id])
+    assert by_game[a.id]["genre"] == {"RPG"}
+    assert by_game[a.id]["theme"] == {"Fantasy"}
+    assert by_game[b.id]["genre"] == {"Shooter"}
