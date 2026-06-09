@@ -27,7 +27,7 @@ def _score_one(
     personal = len(liked_present) - len(disliked_present)
     content = _jaccard(g.genres, profile.high_rated_genres)
     quality = (g.critic_score or 0.0) / 100.0
-    backlog = (_UNPLAYED_HOURS > g.hours_played) * 1.0 + (
+    backlog = (g.hours_played < _UNPLAYED_HOURS) * 1.0 + (
         0.5 if g.status in _BACKLOG_STATUSES else 0.0
     )
     penalties = (1.0 if g.status == "completed" else 0.0) + (
