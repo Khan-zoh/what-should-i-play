@@ -17,6 +17,7 @@ from app.db.models import (
     LibraryEntry,
     Preferences,
     Rating,
+    RecommendationEvent,
     UserGameState,
 )
 
@@ -291,3 +292,67 @@ class GameTagRepository:
         for t in rows:
             result.setdefault(t.game_id, {}).setdefault(t.kind, set()).add(t.tag)
         return result
+
+
+class RecommendationEventRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def create_impression(
+        self,
+        *,
+        game_id: int,
+        surface: str,
+        rank: int,
+        score: float,
+        reason_codes: list[str],
+        model_version: str,
+        feature_hash: str,
+        filters_applied: dict,
+        abstention_path: str,
+        explanation_variant: str,
+    ) -> RecommendationEvent:
+        ev = RecommendationEvent(
+            game_id=game_id,
+            surface=surface,
+            rank=rank,
+            score=score,
+            reason_codes=reason_codes,
+            model_version=model_version,
+            feature_hash=feature_hash,
+            filters_applied=filters_applied,
+            cache_hit=False,
+            abstention_path=abstention_path,
+            explanation_variant=explanation_variant,
+        )
+        self._session.add(ev)
+        self._session.flush()
+        return ev
+
+    def get(self, event_id: int) -> RecommendationEvent | None:
+        return self._session.get(RecommendationEvent, event_id)
+
+    def mark_clicked(self, event_id: int) -> bool:
+        ev = self.get(event_id)
+        if ev is None:
+            return False
+        ev.clicked_at = datetime.utcnow()
+        self._session.flush()
+        return True
+
+    def mark_dismissed(self, event_id: int, reason: str) -> bool:
+        ev = self.get(event_id)
+        if ev is None:
+            return False
+        ev.dismissed_at = datetime.utcnow()
+        ev.dismiss_reason = reason
+        self._session.flush()
+        return True
+
+    def mark_started_playing(self, event_id: int) -> RecommendationEvent | None:
+        ev = self.get(event_id)
+        if ev is None:
+            return None
+        ev.started_playing_at = datetime.utcnow()
+        self._session.flush()
+        return ev
