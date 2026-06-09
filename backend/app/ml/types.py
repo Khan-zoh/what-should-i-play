@@ -9,6 +9,7 @@ class GameFeatures:
     game_id: int
     slug: str
     name: str
+    cover_url: str | None = None
     genres: frozenset[str] = frozenset()
     themes: frozenset[str] = frozenset()
     critic_score: float | None = None
