@@ -4,6 +4,7 @@ import AppShell from "@/components/AppShell";
 import LibraryPage from "@/pages/LibraryPage";
 import PreferencesPage from "@/pages/PreferencesPage";
 import OnboardingWizard from "@/pages/OnboardingWizard";
+import ForYouPage from "@/pages/ForYouPage";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Route path="/onboarding" element={<OnboardingWizard />} />
         <Route element={<AppShell />}>
           <Route index element={<LibraryPage />} />
+          <Route path="for-you" element={<ForYouPage />} />
           <Route path="preferences" element={<PreferencesPage />} />
         </Route>
       </Routes>
