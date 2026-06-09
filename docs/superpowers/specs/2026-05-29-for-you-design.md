@@ -53,7 +53,7 @@ Default grouped weights as a frozen dataclass `HeuristicWeights(personal_match: 
 ### 4.3 `ml/heuristic.py`
 `score_candidates(profile: UserProfile, candidates: list[GameFeatures], weights: HeuristicWeights) -> list[ScoredCandidate]`:
 - Computes per-candidate signal terms (all in [0,1] before weighting):
-  - **personal_match**: `(#liked genres present − #disliked genres present) ` normalized; liked types add a small bonus.
+  - **personal_match**: `#liked genres present − #disliked genres present` — an integer match margin (NOT normalized to [0,1] in v0; the hand-set weights are calibrated to this raw scale, and tuning is deferred to the eval sub-plan). Liked *types* and game *themes* are carried in `UserProfile`/`GameFeatures` for forward-compatibility but are **not scored** in v0, because per-game game-mode/type data is not yet fetched from IGDB. They become live signals in a later sub-plan.
   - **content_similarity**: Jaccard(candidate.genres, profile.high_rated_genres).
   - **quality**: `critic_score / 100` (0 if `None`).
   - **backlog_boost**: `OWNED_AND_UNPLAYED` if `hours_played < 1.0`; `BACKLOG_PRIORITY` if `status in {backlog, installed}`.

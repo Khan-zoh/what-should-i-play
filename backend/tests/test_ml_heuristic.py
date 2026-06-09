@@ -1,3 +1,5 @@
+import math
+
 from app.ml.heuristic import EXCLUDED_STATUSES, score_candidates
 from app.ml.types import GameFeatures, UserProfile
 from app.ml.weights import DEFAULT_WEIGHTS
@@ -5,6 +7,39 @@ from app.ml.weights import DEFAULT_WEIGHTS
 
 def _profile(**kw) -> UserProfile:
     return UserProfile(**kw)
+
+
+def test_nan_critic_score_keeps_ranking_deterministic() -> None:
+    # A NaN critic_score from external data must not make the sort input-order
+    # dependent (NaN comparisons are all False).
+    profile = _profile()
+    a = GameFeatures(
+        game_id=1, slug="a", name="A", critic_score=float("nan"), hours_played=5.0
+    )
+    b = GameFeatures(game_id=2, slug="b", name="B", hours_played=5.0)
+    forward = [c.game_id for c in score_candidates(profile, [a, b], DEFAULT_WEIGHTS)]
+    backward = [c.game_id for c in score_candidates(profile, [b, a], DEFAULT_WEIGHTS)]
+    assert forward == backward
+    assert all(math.isfinite(c.score) for c in score_candidates(profile, [a, b], DEFAULT_WEIGHTS))
+
+
+def test_contributions_sum_to_score_with_expected_keys() -> None:
+    profile = _profile(
+        liked_genres=frozenset({"RPG"}), high_rated_genres=frozenset({"RPG"})
+    )
+    cand = GameFeatures(
+        game_id=1, slug="a", name="A", genres=frozenset({"RPG"}),
+        critic_score=85.0, hours_played=0.0, status="backlog",
+    )
+    [sc] = score_candidates(profile, [cand], DEFAULT_WEIGHTS)
+    assert abs(sum(sc.contributions.values()) - sc.score) < 1e-9
+    assert set(sc.contributions) == {
+        "personal_match",
+        "content_similarity",
+        "quality",
+        "backlog_boost",
+        "penalties",
+    }
 
 
 def test_liked_genre_outranks_neutral() -> None:

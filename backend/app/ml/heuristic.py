@@ -1,6 +1,8 @@
 """Deterministic heuristic ranker. Pure: same inputs -> same outputs, no I/O."""
 from __future__ import annotations
 
+import math
+
 from app.ml.types import GameFeatures, ScoredCandidate, UserProfile
 from app.ml.weights import HeuristicWeights
 
@@ -26,8 +28,14 @@ def _score_one(
 
     personal = len(liked_present) - len(disliked_present)
     content = _jaccard(g.genres, profile.high_rated_genres)
-    quality = (g.critic_score or 0.0) / 100.0
-    backlog = (g.hours_played < _UNPLAYED_HOURS) * 1.0 + (
+    # Guard against NaN/inf from external (IGDB) data: a NaN score would make
+    # the final sort non-total and the ranking input-order-dependent.
+    quality = (
+        g.critic_score / 100.0
+        if g.critic_score is not None and math.isfinite(g.critic_score)
+        else 0.0
+    )
+    backlog = (1.0 if g.hours_played < _UNPLAYED_HOURS else 0.0) + (
         0.5 if g.status in _BACKLOG_STATUSES else 0.0
     )
     penalties = (1.0 if g.status == "completed" else 0.0) + (
