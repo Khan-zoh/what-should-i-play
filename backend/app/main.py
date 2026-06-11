@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, library, onboarding, preferences
+from app.api import health, library, onboarding, preferences, recommendations
 from app.config import settings
 
 
@@ -20,6 +20,7 @@ def create_app() -> FastAPI:
     app.include_router(library.router)
     app.include_router(preferences.router)
     app.include_router(onboarding.router)
+    app.include_router(recommendations.router)
     return app
 
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.repositories import (
     GameRepository,
+    GameTagRepository,
     LibraryEntryRepository,
     SyncRunRepository,
 )
@@ -62,6 +63,7 @@ class LibrarySyncService:
         games: GameRepository,
         library: LibraryEntryRepository,
         sync_runs: SyncRunRepository,
+        game_tags: GameTagRepository,
         session: Session,
     ) -> None:
         self._steam = steam_client
@@ -69,6 +71,7 @@ class LibrarySyncService:
         self._games = games
         self._library = library
         self._runs = sync_runs
+        self._game_tags = game_tags
         self._session = session
 
     def sync_steam(self, *, steam_id: str) -> SyncOutcome:
@@ -115,6 +118,14 @@ class LibrarySyncService:
                 external_id=str(steam_game.appid),
                 hours_played=steam_game.playtime_minutes / 60.0,
             )
+
+            if igdb_game is not None:
+                self._game_tags.replace_tags(
+                    game_id=game.id, kind="genre", tags=igdb_game.genres
+                )
+                self._game_tags.replace_tags(
+                    game_id=game.id, kind="theme", tags=igdb_game.themes
+                )
 
             if existed_before:
                 updated += 1

@@ -7,15 +7,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     DataSyncRun,
     Game,
+    GameTag,
     LibraryEntry,
     Preferences,
     Rating,
+    RecommendationEvent,
     UserGameState,
 )
 
@@ -258,3 +260,99 @@ class PreferencesRepository:
         prefs = self.get_or_create()
         prefs.onboarding_completed = value
         self._session.flush()
+
+
+class GameTagRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def replace_tags(self, *, game_id: int, kind: str, tags: list[str]) -> None:
+        self._session.execute(
+            delete(GameTag).where(GameTag.game_id == game_id, GameTag.kind == kind)
+        )
+        for tag in dict.fromkeys(tags):  # de-dupe, preserve order
+            self._session.add(GameTag(game_id=game_id, kind=kind, tag=tag))
+        self._session.flush()
+
+    def genres_for(self, game_id: int) -> set[str]:
+        rows = self._session.scalars(
+            select(GameTag.tag).where(
+                GameTag.game_id == game_id, GameTag.kind == "genre"
+            )
+        ).all()
+        return set(rows)
+
+    def tags_by_game(self, game_ids: list[int]) -> dict[int, dict[str, set[str]]]:
+        result: dict[int, dict[str, set[str]]] = {gid: {} for gid in game_ids}
+        if not game_ids:
+            return result
+        rows = self._session.scalars(
+            select(GameTag).where(GameTag.game_id.in_(game_ids))
+        ).all()
+        for t in rows:
+            result.setdefault(t.game_id, {}).setdefault(t.kind, set()).add(t.tag)
+        return result
+
+
+class RecommendationEventRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def create_impression(
+        self,
+        *,
+        game_id: int,
+        surface: str,
+        rank: int,
+        score: float,
+        reason_codes: list[str],
+        model_version: str,
+        feature_hash: str,
+        filters_applied: dict,
+        abstention_path: str,
+        explanation_variant: str,
+    ) -> RecommendationEvent:
+        ev = RecommendationEvent(
+            game_id=game_id,
+            surface=surface,
+            rank=rank,
+            score=score,
+            reason_codes=reason_codes,
+            model_version=model_version,
+            feature_hash=feature_hash,
+            filters_applied=filters_applied,
+            cache_hit=False,
+            abstention_path=abstention_path,
+            explanation_variant=explanation_variant,
+        )
+        self._session.add(ev)
+        self._session.flush()
+        return ev
+
+    def get(self, event_id: int) -> RecommendationEvent | None:
+        return self._session.get(RecommendationEvent, event_id)
+
+    def mark_clicked(self, event_id: int) -> bool:
+        ev = self.get(event_id)
+        if ev is None:
+            return False
+        ev.clicked_at = datetime.utcnow()
+        self._session.flush()
+        return True
+
+    def mark_dismissed(self, event_id: int, reason: str) -> bool:
+        ev = self.get(event_id)
+        if ev is None:
+            return False
+        ev.dismissed_at = datetime.utcnow()
+        ev.dismiss_reason = reason
+        self._session.flush()
+        return True
+
+    def mark_started_playing(self, event_id: int) -> RecommendationEvent | None:
+        ev = self.get(event_id)
+        if ev is None:
+            return None
+        ev.started_playing_at = datetime.utcnow()
+        self._session.flush()
+        return ev

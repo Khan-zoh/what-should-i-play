@@ -6,15 +6,16 @@ See `docs/superpowers/specs/2026-05-15-what-should-i-play-design.md` for the ful
 
 ## Status
 
-Foundation + library-import backend + **library page & ratings UI (2b)** + **onboarding, first-run & Steam-failure UX (2c)** complete. The React app has a router with three surfaces:
+Foundation + library-import backend + **library page & ratings UI (2b)** + **onboarding, first-run & Steam-failure UX (2c)** + **heuristic "For You" + telemetry (3)** complete. The React app has a router with four surfaces:
 
-- **Onboarding** (`/onboarding`) — a first-run wizard (Welcome → Connect Steam → Preferences). A new user is auto-redirected here; finishing or skipping sets a persisted flag. This is now the first place the Steam import is triggered from the UI (no curl needed). Import failures show distinct, actionable guidance (private profile, invalid ID with inline re-entry, rate-limited, server API-key problem) with Retry / Skip import.
-- **Library** (`/`) — responsive cover grid with a quick-rate side panel: rate each game Loved/Liked/Meh/Disliked/Hated (→ 5/4/3/2/1), set a play status, filter to rated-only, and sort. Optimistic with rollback. Shows a first-time empty state with an "Import from Steam" CTA when the library is empty.
+- **Onboarding** (`/onboarding`) — a first-run wizard (Welcome → Connect Steam → Preferences). A new user is auto-redirected here; finishing or skipping sets a persisted flag. This is the first place the Steam import is triggered from the UI (no curl needed). Import failures show distinct, actionable guidance (private profile, invalid ID with inline re-entry, rate-limited, server API-key problem) with Retry / Skip import.
+- **For You** (`/for-you`) — a heuristic recommendation feed over your owned library: each card carries a grounded explanation built from deterministic reason codes (matches-liked-genre, owned-and-unplayed, backlog-priority, high-critic-score, similar-to-high-rated), a "Why?" expander showing the raw codes, a "Start playing" action (sets status + logs a positive signal), and a structured Dismiss. Every impression and interaction is logged to `recommendation_events`. Scoring lives in a pure `app/ml/` package (no DB/web imports) so it can be lifted into a notebook/eval harness later.
+- **Library** (`/`) — responsive cover grid with a quick-rate side panel: rate each game Loved/Liked/Meh/Disliked/Hated (→ 5/4/3/2/1), set a play status, filter to rated-only, and sort. Optimistic with rollback. First-time empty state with an "Import from Steam" CTA.
 - **Preferences** (`/preferences`) — liked/disliked genres, enjoyed types, session length, difficulty, plus a "Re-run setup" button.
 
-Steam library imports via `POST /api/library/sync/steam` (the response now carries a machine-readable `error_code` on failure). Endpoints: `GET /api/library` (includes each game's rating + status), `POST /api/library/games/{id}/rating` (null clears), `PUT /api/library/games/{id}/status` (null clears), `GET|PUT /api/preferences`, `GET|PUT /api/onboarding`.
+The Steam sync now also imports IGDB genres/themes as game tags (feeding the recommender). Steam library imports via `POST /api/library/sync/steam` (failure responses carry a machine-readable `error_code`). Endpoints: `GET /api/library` (includes rating + status), `POST /api/library/games/{id}/rating`, `PUT /api/library/games/{id}/status`, `GET|PUT /api/preferences`, `GET|PUT /api/onboarding`, `GET /api/for-you`, `POST /api/recommendations/{id}/{click|dismiss|start-playing}`.
 
-Manual game entry, a "For You" surface, and the mood quiz ship in later sub-plans.
+Content embeddings (sub-plan 4), the mood quiz, a personal reranker, and buyable-game recommendations ship in later sub-plans.
 
 ## Prerequisites
 

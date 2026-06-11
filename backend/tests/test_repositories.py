@@ -378,3 +378,94 @@ def test_preferences_update_preserves_onboarding_flag(db_session) -> None:
     )
     db_session.commit()
     assert repo.get_onboarding_completed() is True  # not clobbered by a prefs save
+
+
+# ---------------------------------------------------------------------------
+# GameTagRepository
+# ---------------------------------------------------------------------------
+
+
+def test_game_tag_repository_replace_is_idempotent(db_session) -> None:
+    from app.db.repositories import GameRepository, GameTagRepository
+
+    g = GameRepository(db_session).upsert(igdb_id=1, steam_appid=10, name="A", slug="a")
+    db_session.commit()
+    repo = GameTagRepository(db_session)
+
+    repo.replace_tags(game_id=g.id, kind="genre", tags=["RPG", "Adventure"])
+    db_session.commit()
+    assert repo.genres_for(g.id) == {"RPG", "Adventure"}
+
+    # Re-running replaces, does not duplicate.
+    repo.replace_tags(game_id=g.id, kind="genre", tags=["RPG", "Strategy"])
+    db_session.commit()
+    assert repo.genres_for(g.id) == {"RPG", "Strategy"}
+
+
+def test_game_tag_repository_tags_by_game_groups_by_kind(db_session) -> None:
+    from app.db.repositories import GameRepository, GameTagRepository
+
+    games = GameRepository(db_session)
+    a = games.upsert(igdb_id=1, steam_appid=10, name="A", slug="a")
+    b = games.upsert(igdb_id=2, steam_appid=20, name="B", slug="b")
+    db_session.commit()
+    repo = GameTagRepository(db_session)
+    repo.replace_tags(game_id=a.id, kind="genre", tags=["RPG"])
+    repo.replace_tags(game_id=a.id, kind="theme", tags=["Fantasy"])
+    repo.replace_tags(game_id=b.id, kind="genre", tags=["Shooter"])
+    db_session.commit()
+
+    by_game = repo.tags_by_game([a.id, b.id])
+    assert by_game[a.id]["genre"] == {"RPG"}
+    assert by_game[a.id]["theme"] == {"Fantasy"}
+    assert by_game[b.id]["genre"] == {"Shooter"}
+
+
+# ---------------------------------------------------------------------------
+# RecommendationEventRepository
+# ---------------------------------------------------------------------------
+
+
+def test_recommendation_event_create_and_mark(db_session) -> None:
+    from app.db.repositories import GameRepository, RecommendationEventRepository
+
+    g = GameRepository(db_session).upsert(igdb_id=1, steam_appid=10, name="A", slug="a")
+    db_session.commit()
+    repo = RecommendationEventRepository(db_session)
+
+    ev = repo.create_impression(
+        game_id=g.id,
+        surface="for_you",
+        rank=0,
+        score=1.23,
+        reason_codes=["OWNED_AND_UNPLAYED"],
+        model_version="heuristic-v0",
+        feature_hash="abc123",
+        filters_applied={},
+        abstention_path="heuristic",
+        explanation_variant="templated",
+    )
+    db_session.commit()
+    assert ev.id is not None
+    assert ev.cache_hit is False
+
+    assert repo.mark_clicked(ev.id) is True
+    assert repo.mark_dismissed(ev.id, "too_long") is True
+    started = repo.mark_started_playing(ev.id)
+    db_session.commit()
+    assert started is not None and started.game_id == g.id
+
+    fetched = repo.get(ev.id)
+    assert fetched.clicked_at is not None
+    assert fetched.dismissed_at is not None
+    assert fetched.dismiss_reason == "too_long"
+    assert fetched.started_playing_at is not None
+
+
+def test_recommendation_event_mark_unknown_returns_false_none(db_session) -> None:
+    from app.db.repositories import RecommendationEventRepository
+
+    repo = RecommendationEventRepository(db_session)
+    assert repo.mark_clicked(99999) is False
+    assert repo.mark_dismissed(99999, "too_long") is False
+    assert repo.mark_started_playing(99999) is None

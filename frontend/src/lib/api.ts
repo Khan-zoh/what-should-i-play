@@ -71,3 +71,28 @@ export const syncSteam = (steamId?: string) =>
     "/api/library/sync/steam",
     steamId ? { steam_id: steamId } : {},
   );
+
+export interface ForYouItem {
+  event_id: number;
+  game_id: number;
+  name: string;
+  slug: string;
+  cover_url: string | null;
+  genres: string[];
+  critic_score: number | null;
+  hours_played: number;
+  status: string | null;
+  reason_codes: string[];
+  explanation: string;
+  score: number;
+  model_version: string;
+}
+
+export const getForYou = (limit = 20) =>
+  apiGet<{ items: ForYouItem[] }>(`/api/for-you?limit=${limit}`);
+export const postRecClick = (eventId: number) =>
+  apiPost(`/api/recommendations/${eventId}/click`, {});
+export const postRecDismiss = (eventId: number, reason: string) =>
+  apiPost(`/api/recommendations/${eventId}/dismiss`, { reason });
+export const postRecStartPlaying = (eventId: number) =>
+  apiPost(`/api/recommendations/${eventId}/start-playing`, {});
