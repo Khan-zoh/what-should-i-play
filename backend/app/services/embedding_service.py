@@ -119,7 +119,7 @@ class EmbeddingService:
                 failed=[{"game_id": gid, "error": str(e)} for gid in ordered],
             )
 
-        for gid, vec in zip(ordered, vectors):
+        for gid, vec in zip(ordered, vectors, strict=True):
             self._embeddings.upsert(game_id=gid, model_name=self._revision, vector=vec)
         return EmbedReport(
             model=self._revision,

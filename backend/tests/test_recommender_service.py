@@ -88,8 +88,14 @@ def test_embedding_channel_activates_v1_with_grounded_code(db_session: Session) 
     from app.db.repositories import GameEmbeddingRepository, RatingRepository
     from app.services.embedding_service import embedding_revision
 
-    loved = _seed_owned(db_session, igdb_id=1, appid=10, name="Hades", slug="hades", hours=20.0, genres=["Roguelike"])
-    cand = _seed_owned(db_session, igdb_id=2, appid=20, name="Celeste", slug="celeste", hours=0.0, genres=["Platformer"])
+    loved = _seed_owned(
+        db_session, igdb_id=1, appid=10, name="Hades", slug="hades",
+        hours=20.0, genres=["Roguelike"],
+    )
+    cand = _seed_owned(
+        db_session, igdb_id=2, appid=20, name="Celeste", slug="celeste",
+        hours=0.0, genres=["Platformer"],
+    )
     RatingRepository(db_session).upsert(game_id=loved.id, enjoyment=5, notes=None)
     db_session.commit()
 
@@ -123,8 +129,14 @@ def test_missing_embedding_falls_back_whole_request_to_v0(db_session: Session) -
     from app.db.repositories import GameEmbeddingRepository, RatingRepository
     from app.services.embedding_service import embedding_revision
 
-    loved = _seed_owned(db_session, igdb_id=1, appid=10, name="Hades", slug="hades", hours=20.0, genres=["Roguelike"])
-    _seed_owned(db_session, igdb_id=2, appid=20, name="NoVec", slug="novec", hours=0.0, genres=["Puzzle"])
+    loved = _seed_owned(
+        db_session, igdb_id=1, appid=10, name="Hades", slug="hades",
+        hours=20.0, genres=["Roguelike"],
+    )
+    _seed_owned(
+        db_session, igdb_id=2, appid=20, name="NoVec", slug="novec",
+        hours=0.0, genres=["Puzzle"],
+    )
     RatingRepository(db_session).upsert(game_id=loved.id, enjoyment=5, notes=None)
     db_session.commit()
 
