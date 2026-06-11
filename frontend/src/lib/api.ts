@@ -96,3 +96,14 @@ export const postRecDismiss = (eventId: number, reason: string) =>
   apiPost(`/api/recommendations/${eventId}/dismiss`, { reason });
 export const postRecStartPlaying = (eventId: number) =>
   apiPost(`/api/recommendations/${eventId}/start-playing`, {});
+
+export interface EmbedReport {
+  model: string;
+  attempted: number;
+  embedded: number;
+  skipped_existing: number;
+  failed: { game_id: number; error: string }[];
+}
+
+export const postEmbeddingsRebuild = (force = false) =>
+  apiPost<EmbedReport>(`/api/embeddings/rebuild${force ? "?force=true" : ""}`, {});

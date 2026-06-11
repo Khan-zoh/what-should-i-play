@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { syncSteam, type SyncResult } from "@/lib/api";
+import { postEmbeddingsRebuild, syncSteam, type SyncResult } from "@/lib/api";
 import { messageForErrorCode } from "@/lib/onboardingMessages";
 import { Button } from "@/components/ui/button";
 
@@ -15,6 +15,12 @@ export default function ConnectStep({ onNext }: { onNext: () => void }) {
     try {
       const r = await syncSteam(steamId.trim() || undefined);
       setResult(r);
+      if (r.status === "ok" || r.status === "partial") {
+        // Fire-and-forget: warm content embeddings for the freshly imported
+        // library. Failure (e.g. [ml] extra not installed) is non-fatal; the
+        // recommender falls back to genre similarity until a rebuild succeeds.
+        postEmbeddingsRebuild().catch(() => {});
+      }
     } catch {
       setResult({
         run_id: 0,
