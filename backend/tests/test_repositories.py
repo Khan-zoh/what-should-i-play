@@ -469,3 +469,34 @@ def test_recommendation_event_mark_unknown_returns_false_none(db_session) -> Non
     assert repo.mark_clicked(99999) is False
     assert repo.mark_dismissed(99999, "too_long") is False
     assert repo.mark_started_playing(99999) is None
+
+
+def test_game_embedding_upsert_roundtrip_and_missing(db_session) -> None:
+    import numpy as np
+
+    from app.db.repositories import GameEmbeddingRepository, GameRepository
+
+    games = GameRepository(db_session)
+    a = games.upsert(igdb_id=1, steam_appid=10, name="A", slug="a")
+    b = games.upsert(igdb_id=2, steam_appid=20, name="B", slug="b")
+    db_session.commit()
+    repo = GameEmbeddingRepository(db_session)
+
+    vec = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+    repo.upsert(game_id=a.id, model_name="m|t1", vector=vec)
+    db_session.commit()
+
+    loaded = repo.get_all(model_name="m|t1")
+    assert set(loaded) == {a.id}
+    assert np.allclose(loaded[a.id], vec)
+    assert loaded[a.id].dtype == np.float32
+
+    assert repo.missing_game_ids([a.id, b.id], model_name="m|t1") == [b.id]
+
+    # Upsert replaces, not duplicates; a different revision is a separate row.
+    vec2 = np.array([9.0, 9.0, 9.0], dtype=np.float32)
+    repo.upsert(game_id=a.id, model_name="m|t1", vector=vec2)
+    repo.upsert(game_id=a.id, model_name="m|t2", vector=vec)
+    db_session.commit()
+    assert np.allclose(repo.get_all(model_name="m|t1")[a.id], vec2)
+    assert np.allclose(repo.get_all(model_name="m|t2")[a.id], vec)

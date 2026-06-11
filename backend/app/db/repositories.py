@@ -7,12 +7,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import numpy as np
 from sqlalchemy import delete, desc, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     DataSyncRun,
     Game,
+    GameEmbedding,
     GameTag,
     LibraryEntry,
     Preferences,
@@ -356,3 +358,52 @@ class RecommendationEventRepository:
         ev.started_playing_at = datetime.utcnow()
         self._session.flush()
         return ev
+
+
+class GameEmbeddingRepository:
+    """Stores embedding vectors as float32 bytes, keyed by (game_id, model_name).
+
+    `model_name` is a composite revision string ("<model>|t<template-version>") so
+    a text-template change creates new rows instead of silently reusing stale ones.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def upsert(self, *, game_id: int, model_name: str, vector: np.ndarray) -> None:
+        vec32 = np.asarray(vector, dtype=np.float32)
+        existing = self._session.scalar(
+            select(GameEmbedding).where(
+                GameEmbedding.game_id == game_id,
+                GameEmbedding.model_name == model_name,
+            )
+        )
+        if existing is None:
+            existing = GameEmbedding(
+                game_id=game_id, model_name=model_name, dim=int(vec32.shape[0])
+            )
+            self._session.add(existing)
+        existing.dim = int(vec32.shape[0])
+        existing.embedding = vec32.tobytes()
+        self._session.flush()
+
+    def get_all(self, *, model_name: str) -> dict[int, np.ndarray]:
+        rows = self._session.scalars(
+            select(GameEmbedding).where(GameEmbedding.model_name == model_name)
+        ).all()
+        return {
+            r.game_id: np.frombuffer(r.embedding, dtype=np.float32) for r in rows
+        }
+
+    def missing_game_ids(self, game_ids: list[int], *, model_name: str) -> list[int]:
+        if not game_ids:
+            return []
+        have = set(
+            self._session.scalars(
+                select(GameEmbedding.game_id).where(
+                    GameEmbedding.model_name == model_name,
+                    GameEmbedding.game_id.in_(game_ids),
+                )
+            ).all()
+        )
+        return [gid for gid in game_ids if gid not in have]
