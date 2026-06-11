@@ -132,5 +132,8 @@ def test_real_encoder_contract() -> None:
     out = encoder.encode(["hello world", "hello world"])
     assert out.shape == (2, 384)
     assert out.dtype == np.float32
-    assert np.allclose(out[0], out[1])  # deterministic
+    # Same text at different batch positions differs at ~1e-8 (CPU matmul
+    # reduction order). The contract that matters downstream is cosine-level
+    # stability, so assert near-equality with an explicit tolerance.
+    assert np.allclose(out[0], out[1], atol=1e-5)
     assert abs(float(np.linalg.norm(out[0])) - 1.0) < 1e-3  # L2-normalized
