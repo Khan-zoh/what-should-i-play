@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, library, onboarding, preferences, recommendations
+from app.api import embeddings, health, library, onboarding, preferences, recommendations
 from app.config import settings
 
 
@@ -21,6 +21,7 @@ def create_app() -> FastAPI:
     app.include_router(preferences.router)
     app.include_router(onboarding.router)
     app.include_router(recommendations.router)
+    app.include_router(embeddings.router)
     return app
 
 

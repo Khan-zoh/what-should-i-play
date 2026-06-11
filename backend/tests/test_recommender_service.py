@@ -80,3 +80,71 @@ def test_recommend_respects_limit(db_session: Session) -> None:
 def test_recommend_empty_library_returns_empty(db_session: Session) -> None:
     recs = _service(db_session).recommend(limit=10)
     assert recs == []
+
+
+def test_embedding_channel_activates_v1_with_grounded_code(db_session: Session) -> None:
+    import numpy as np
+
+    from app.db.repositories import GameEmbeddingRepository, RatingRepository
+    from app.services.embedding_service import embedding_revision
+
+    loved = _seed_owned(db_session, igdb_id=1, appid=10, name="Hades", slug="hades", hours=20.0, genres=["Roguelike"])
+    cand = _seed_owned(db_session, igdb_id=2, appid=20, name="Celeste", slug="celeste", hours=0.0, genres=["Platformer"])
+    RatingRepository(db_session).upsert(game_id=loved.id, enjoyment=5, notes=None)
+    db_session.commit()
+
+    rev = embedding_revision("fake-model")
+    emb = GameEmbeddingRepository(db_session)
+    emb.upsert(game_id=loved.id, model_name=rev, vector=np.array([1.0, 0.0], dtype=np.float32))
+    emb.upsert(game_id=cand.id, model_name=rev, vector=np.array([0.95, 0.05], dtype=np.float32))
+    db_session.commit()
+
+    service = RecommenderService(
+        candidate_source=OwnedLibraryCandidateSource(
+            library=LibraryEntryRepository(db_session),
+            tags=GameTagRepository(db_session),
+        ),
+        preferences=PreferencesRepository(db_session),
+        events=RecommendationEventRepository(db_session),
+        embeddings=emb,
+        embedding_revision=rev,
+    )
+    recs = service.recommend(limit=10)
+    db_session.commit()
+
+    assert all(r.model_version == "heuristic-v1" for r in recs)
+    celeste = [r for r in recs if r.slug == "celeste"][0]
+    assert "SIMILAR_TO_HIGH_RATED_GAME:hades" in celeste.reason_codes
+
+
+def test_missing_embedding_falls_back_whole_request_to_v0(db_session: Session) -> None:
+    import numpy as np
+
+    from app.db.repositories import GameEmbeddingRepository, RatingRepository
+    from app.services.embedding_service import embedding_revision
+
+    loved = _seed_owned(db_session, igdb_id=1, appid=10, name="Hades", slug="hades", hours=20.0, genres=["Roguelike"])
+    _seed_owned(db_session, igdb_id=2, appid=20, name="NoVec", slug="novec", hours=0.0, genres=["Puzzle"])
+    RatingRepository(db_session).upsert(game_id=loved.id, enjoyment=5, notes=None)
+    db_session.commit()
+
+    rev = embedding_revision("fake-model")
+    emb = GameEmbeddingRepository(db_session)
+    emb.upsert(game_id=loved.id, model_name=rev, vector=np.array([1.0, 0.0], dtype=np.float32))
+    db_session.commit()  # second game has NO vector -> all-or-nothing fallback
+
+    service = RecommenderService(
+        candidate_source=OwnedLibraryCandidateSource(
+            library=LibraryEntryRepository(db_session),
+            tags=GameTagRepository(db_session),
+        ),
+        preferences=PreferencesRepository(db_session),
+        events=RecommendationEventRepository(db_session),
+        embeddings=emb,
+        embedding_revision=rev,
+    )
+    recs = service.recommend(limit=10)
+    assert all(r.model_version == "heuristic-v0" for r in recs)
+    assert not any(
+        c.startswith("SIMILAR_TO_HIGH_RATED_GAME:") for r in recs for c in r.reason_codes
+    )

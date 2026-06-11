@@ -6,13 +6,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session
+from app.config import settings
 from app.db.repositories import (
+    GameEmbeddingRepository,
     GameTagRepository,
     LibraryEntryRepository,
     PreferencesRepository,
     RecommendationEventRepository,
     UserGameStateRepository,
 )
+from app.services.embedding_service import embedding_revision
 from app.services.recommender_service import (
     OwnedLibraryCandidateSource,
     RecommenderService,
@@ -64,6 +67,8 @@ def _build_recommender(session: Session) -> RecommenderService:
         ),
         preferences=PreferencesRepository(session),
         events=RecommendationEventRepository(session),
+        embeddings=GameEmbeddingRepository(session),
+        embedding_revision=embedding_revision(settings.embedding_model_name),
     )
 
 
