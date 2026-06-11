@@ -11,17 +11,20 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.db.repositories import (
+    GameEmbeddingRepository,
     GameTagRepository,
     LibraryEntryRepository,
     PreferencesRepository,
     RecommendationEventRepository,
 )
+from app.ml.content import ContentScore, HighRatedItem, content_scores
 from app.ml.explanations import explain
 from app.ml.heuristic import score_candidates
 from app.ml.types import GameFeatures, UserProfile
 from app.ml.weights import DEFAULT_WEIGHTS
 
 MODEL_VERSION = "heuristic-v0"
+MODEL_VERSION_EMBEDDINGS = "heuristic-v1"
 SURFACE = "for_you"
 ABSTENTION_PATH = "heuristic"
 EXPLANATION_VARIANT = "templated"
@@ -85,8 +88,14 @@ class OwnedLibraryCandidateSource:
         return features
 
 
-def _feature_hash(profile: UserProfile, candidates: list[GameFeatures]) -> str:
+def _feature_hash(
+    profile: UserProfile,
+    candidates: list[GameFeatures],
+    *,
+    embedding_revision: str | None = None,
+) -> str:
     payload = {
+        "embedding_revision": embedding_revision,
         "liked": sorted(profile.liked_genres),
         "disliked": sorted(profile.disliked_genres),
         "high_rated": sorted(profile.high_rated_genres),
@@ -113,10 +122,39 @@ class RecommenderService:
         candidate_source: CandidateSource,
         preferences: PreferencesRepository,
         events: RecommendationEventRepository,
+        embeddings: GameEmbeddingRepository | None = None,
+        embedding_revision: str | None = None,
     ) -> None:
         self._source = candidate_source
         self._prefs = preferences
         self._events = events
+        self._embeddings = embeddings
+        self._embedding_revision = embedding_revision
+
+    def _content_channel(
+        self, candidates: list[GameFeatures]
+    ) -> dict[int, ContentScore] | None:
+        """All-or-nothing embedding channel (Codex debate D4): active only when a
+        liked centroid is computable AND every candidate has a vector. Partial
+        coverage falls back wholesale so rankings and telemetry stay coherent."""
+        if self._embeddings is None or self._embedding_revision is None:
+            return None
+        vectors = self._embeddings.get_all(model_name=self._embedding_revision)
+        if any(c.game_id not in vectors for c in candidates):
+            return None
+        high_rated = [
+            HighRatedItem(
+                game_id=c.game_id, slug=c.slug, name=c.name, vector=vectors[c.game_id]
+            )
+            for c in candidates
+            if c.user_enjoyment is not None
+            and c.user_enjoyment >= _HIGH_RATED_THRESHOLD
+        ]
+        if not high_rated:
+            return None
+        return content_scores(
+            {c.game_id: vectors[c.game_id] for c in candidates}, high_rated
+        )
 
     def _build_profile(
         self, candidates: list[GameFeatures]
@@ -140,8 +178,16 @@ class RecommenderService:
         if not candidates:
             return []
         profile = self._build_profile(candidates)
-        feature_hash = _feature_hash(profile, candidates)
-        scored = score_candidates(profile, candidates, DEFAULT_WEIGHTS)[:limit]
+        content = self._content_channel(candidates)
+        version = MODEL_VERSION_EMBEDDINGS if content is not None else MODEL_VERSION
+        feature_hash = _feature_hash(
+            profile,
+            candidates,
+            embedding_revision=self._embedding_revision if content is not None else None,
+        )
+        scored = score_candidates(profile, candidates, DEFAULT_WEIGHTS, content=content)[
+            :limit
+        ]
 
         by_id = {c.game_id: c for c in candidates}
         recs: list[Recommendation] = []
@@ -153,7 +199,7 @@ class RecommenderService:
                 rank=rank,
                 score=sc.score,
                 reason_codes=sc.reason_codes,
-                model_version=MODEL_VERSION,
+                model_version=version,
                 feature_hash=feature_hash,
                 filters_applied={},
                 abstention_path=ABSTENTION_PATH,
@@ -173,7 +219,7 @@ class RecommenderService:
                     reason_codes=sc.reason_codes,
                     explanation=explain(sc.reason_codes),
                     score=sc.score,
-                    model_version=MODEL_VERSION,
+                    model_version=version,
                 )
             )
         return recs

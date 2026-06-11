@@ -19,5 +19,8 @@ class Settings(BaseSettings):
     # HTTP timeouts (seconds)
     http_timeout_seconds: float = 10.0
 
+    # Sentence-transformer model for game content embeddings (the [ml] extra).
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+
 
 settings = Settings()

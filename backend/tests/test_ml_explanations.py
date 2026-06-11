@@ -20,6 +20,14 @@ def test_high_critic_and_backlog() -> None:
     assert "backlog" in s.lower()
 
 
+def test_similar_to_high_rated_game_humanizes_slug() -> None:
+    s = explain(["SIMILAR_TO_HIGH_RATED_GAME:hollow-knight"])
+    assert "Hollow Knight" in s
+    assert "similar" in s.lower()
+    # The generic "resembles" clause must not double-fire for the _GAME code.
+    assert "resembles" not in s.lower()
+
+
 def test_fallback_is_non_empty() -> None:
     s = explain(["IN_YOUR_LIBRARY"])
     assert "library" in s.lower()
