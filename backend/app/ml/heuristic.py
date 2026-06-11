@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 
+from app.ml.content import ContentScore
 from app.ml.types import GameFeatures, ScoredCandidate, UserProfile
 from app.ml.weights import HeuristicWeights
 
@@ -11,6 +12,9 @@ _BACKLOG_STATUSES = frozenset({"backlog", "installed"})
 _HIGH_CRITIC = 80.0
 _UNPLAYED_HOURS = 1.0
 _MAX_GENRE_CODES = 3
+# Below this embedding similarity the SIMILAR_TO_HIGH_RATED_GAME code would be
+# a stretch; the similarity still contributes to the score, just without a claim.
+_SIMILAR_GAME_CODE_THRESHOLD = 0.35
 
 
 def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
@@ -20,14 +24,21 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
 
 
 def _score_one(
-    profile: UserProfile, g: GameFeatures, w: HeuristicWeights
+    profile: UserProfile,
+    g: GameFeatures,
+    w: HeuristicWeights,
+    content_score: ContentScore | None,
 ) -> ScoredCandidate:
     liked_present = g.genres & profile.liked_genres
     disliked_present = g.genres & profile.disliked_genres
     shared_high = g.genres & profile.high_rated_genres
 
     personal = len(liked_present) - len(disliked_present)
-    content = _jaccard(g.genres, profile.high_rated_genres)
+    # Embedding channel (when provided) replaces the genre-Jaccard stand-in.
+    if content_score is not None:
+        content = content_score.similarity
+    else:
+        content = _jaccard(g.genres, profile.high_rated_genres)
     # Guard against NaN/inf from external (IGDB) data: a NaN score would make
     # the final sort non-total and the ranking input-order-dependent.
     quality = (
@@ -54,7 +65,15 @@ def _score_one(
     codes: list[str] = []
     for genre in sorted(liked_present)[:_MAX_GENRE_CODES]:
         codes.append(f"MATCHES_LIKED_GENRE:{genre}")
-    if shared_high:
+    if content_score is not None:
+        # Embedding path: ground the similarity claim in a concrete game, and
+        # only when the similarity actually supports it.
+        if (
+            content_score.nearest_slug
+            and content_score.similarity >= _SIMILAR_GAME_CODE_THRESHOLD
+        ):
+            codes.append(f"SIMILAR_TO_HIGH_RATED_GAME:{content_score.nearest_slug}")
+    elif shared_high:
         codes.append(f"SIMILAR_TO_HIGH_RATED:{sorted(shared_high)[0]}")
     if g.critic_score is not None and g.critic_score >= _HIGH_CRITIC:
         codes.append("HIGH_CRITIC_SCORE")
@@ -74,9 +93,13 @@ def score_candidates(
     profile: UserProfile,
     candidates: list[GameFeatures],
     weights: HeuristicWeights,
+    content: dict[int, ContentScore] | None = None,
 ) -> list[ScoredCandidate]:
+    """Rank candidates. `content` is the optional embedding channel: when the
+    caller provides it (all-or-nothing per request), each candidate's content
+    term comes from its ContentScore instead of genre Jaccard."""
     scored = [
-        _score_one(profile, g, weights)
+        _score_one(profile, g, weights, content.get(g.game_id) if content else None)
         for g in candidates
         if g.status not in EXCLUDED_STATUSES
     ]

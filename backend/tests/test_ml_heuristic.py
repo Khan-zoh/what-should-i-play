@@ -1,5 +1,6 @@
 import math
 
+from app.ml.content import ContentScore
 from app.ml.heuristic import EXCLUDED_STATUSES, score_candidates
 from app.ml.types import GameFeatures, UserProfile
 from app.ml.weights import DEFAULT_WEIGHTS
@@ -7,6 +8,42 @@ from app.ml.weights import DEFAULT_WEIGHTS
 
 def _profile(**kw) -> UserProfile:
     return UserProfile(**kw)
+
+
+def test_content_channel_overrides_genre_jaccard() -> None:
+    # Both candidates share zero genres with high_rated_genres, but the content
+    # channel says candidate 1 is semantically close.
+    profile = _profile(high_rated_genres=frozenset({"RPG"}))
+    a = GameFeatures(game_id=1, slug="a", name="A", hours_played=5.0)
+    b = GameFeatures(game_id=2, slug="b", name="B", hours_played=5.0)
+    content = {
+        1: ContentScore(similarity=0.9, nearest_slug="hades", nearest_name="Hades"),
+        2: ContentScore(similarity=0.1, nearest_slug="hades", nearest_name="Hades"),
+    }
+    ranked = score_candidates(profile, [b, a], DEFAULT_WEIGHTS, content=content)
+    assert [c.game_id for c in ranked] == [1, 2]
+    assert "SIMILAR_TO_HIGH_RATED_GAME:hades" in ranked[0].reason_codes
+    # Genre-based code must NOT appear on the embedding path.
+    assert not any(
+        c.startswith("SIMILAR_TO_HIGH_RATED:") for c in ranked[0].reason_codes
+    )
+
+
+def test_content_channel_code_requires_similarity_threshold() -> None:
+    profile = _profile()
+    a = GameFeatures(game_id=1, slug="a", name="A", hours_played=5.0)
+    content = {1: ContentScore(similarity=0.2, nearest_slug="hades", nearest_name="Hades")}
+    [scored] = score_candidates(profile, [a], DEFAULT_WEIGHTS, content=content)
+    assert not any(c.startswith("SIMILAR_TO_HIGH_RATED_GAME:") for c in scored.reason_codes)
+    # The similarity still contributes to the score even below the code threshold.
+    assert scored.contributions["content_similarity"] > 0.0
+
+
+def test_content_none_keeps_jaccard_path() -> None:
+    profile = _profile(high_rated_genres=frozenset({"RPG"}))
+    a = GameFeatures(game_id=1, slug="a", name="A", genres=frozenset({"RPG"}), hours_played=5.0)
+    [scored] = score_candidates(profile, [a], DEFAULT_WEIGHTS, content=None)
+    assert "SIMILAR_TO_HIGH_RATED:RPG" in scored.reason_codes
 
 
 def test_nan_critic_score_keeps_ranking_deterministic() -> None:
